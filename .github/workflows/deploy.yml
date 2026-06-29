@@ -1,27 +1,48 @@
-name: CD Pipeline - Auto Deploy to AWS EC2
+name: Free SSL Docker Deployment
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Code Repository
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Deploy to AWS EC2 via Secure SSH
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: 13.60.230.184
-        username: ubuntu
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          sudo apt update && sudo apt install -y docker.io
-          sudo systemctl stop nginx || true
-          sudo docker stop web-app || true
-          sudo docker rm web-app || true
-          sudo docker run -d --name web-app -p 80:80 nginx:alpine
-          sudo docker exec web-app sh -c 'echo "<h1>Ibrahim Final DevOps Project Automated Via GitHub Actions CI/CD Loop!</h1>" > /usr/share/nginx/html/index.html'
+      - name: Deploy via SSH to Server Alpha
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: "13.60.230.184"
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo apt update && sudo apt install -y docker.io docker-compose-v2
+            mkdir -p /home/ubuntu/ssl-project/html && cd /home/ubuntu/ssl-project
+            
+            echo "<h1>Ibrahim DevOps Project: Free SSL Padlock Active via DuckDNS!</h1>" > html/index.html
+            
+            cat << 'INNER_EOF' > docker-compose.yml
+            version: '3.8'
+            services:
+              web-server:
+                image: nginx:alpine
+                ports:
+                  - "80:80"
+                  - "443:443"
+                volumes:
+                  - ./html:/usr/share/nginx/html
+                  - ./certbot/conf:/etc/letsencrypt
+                  - ./certbot/www:/var/www
+              certbot:
+                image: certbot/certbot
+                volumes:
+                  - ./certbot/conf:/etc/letsencrypt
+                  - ./certbot/www:/var/www
+                command: certonly --webroot -w /var/www -d ibrahimdevops.duckdns.org --email ibrahimdevopsalert@gmail.com --agree-tos --no-eff-email
+            INNER_EOF
+
+            sudo docker compose down || true
+            sudo docker compose up -d
